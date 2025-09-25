@@ -19,11 +19,13 @@ It integrates with Excel metadata to fetch file paths and names, then drives San
 
 ## Project Structure
 Sandman_EDF_Automation/
-├── get_next.py               # Python script to fetch next task from Excel
-├── update_status.py          # Python script to update Excel status
-├── Sandman_PSG_Studies.ahk   # AHK automation script
-├── test_paths.xlsx           # PSG metadata
-└── README.md                 # Project documentation
+├── get_next.py                  # Python script to fetch next task from Excel
+├── update_status.py             # Python script to update Excel status
+├── Sandman_edf_annotation.ahk   # AHK automation script
+├── test_paths.xlsx              # PSG metadata
+└── README.md                    # Project documentation
+
+---
 
 ## Requirements
 
