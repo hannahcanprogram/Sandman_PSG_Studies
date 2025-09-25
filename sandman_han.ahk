@@ -105,18 +105,6 @@ Loop {
 
         result := FileRead(A_ScriptDir "\result.json", "UTF-8")
 
-
-        if (Trim(result) = "")
-        {
-            MsgBox "failed reading result.json or empty, process ended", "error", "Iconx"
-            ExitApp
-        }
-        if (Trim(result) = "{}")
-        {
-            MsgBox "Excel no recordsd, process ended."
-            ExitApp
-        }
-
         path := RegExReplace(result, '.*"path":\s*"(.*?)".*', "$1")
         name := RegExReplace(result, '.*"name":\s*"(.*?)".*', "$1")
         result := FileRead(A_ScriptDir "\result.json", "UTF-8")
@@ -509,7 +497,7 @@ Loop {
         WinWaitClose("Export Data", , 1800)
 
         UpdateStatus(row, "success", name)
-        ;---------------------------------------Step 5: Exit--------------------------------------------------------------
+        ;---------------------------------------Step 6: Exit--------------------------------------------------------------
         WinActivate("ahk_exe Analysis.exe"), WinWaitActive("ahk_exe Analysis.exe",,5) ; Sandman Analysis
         WinClose("ahk_exe Analysis.exe")
         Sleep 1000
