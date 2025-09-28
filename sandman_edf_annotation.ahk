@@ -476,7 +476,7 @@ Loop {
 
                 try {
                     if !ControlClick("Button1", title) {
-                        ; 如果 Button1
+                        ;Button1
                         Send("{Enter}")
                     }
                 } catch {
