@@ -306,7 +306,6 @@ Loop {
 
         
         SplitPath(path, , &lockDir)
-        ; 如果实际锁文件在上一级目录，就再执行一次 SplitPath(lockDir, , &lockDir)
 
         if !WaitNoLock(lockDir, 60000) {
             UpdateStatus(row, "skip_lock", "lock timeout at " lockDir)
