@@ -4,7 +4,8 @@ SetTitleMatchMode(2)
 SetWorkingDir(A_ScriptDir)
 
 UpdateStatus(row, status, extra := "") {
-    xlsx  := "D:\PSG_test\test_paths.xlsx"
+    ;xlsx  := "D:\PSG_test\test_paths.xlsx"
+    xlsx  := "E:\Machine_01\Sandman\Metadata\group4_A.xlsx"
     sheet := "Sheet1"
     extra2 := StrReplace(extra, '"', "''")
     cmd := A_ComSpec
@@ -40,7 +41,6 @@ ClearAndSet(ctrl, text, winTitle) {
         throw Error("window is not activate: " winTitle)
 
     ControlFocus ctrl, winTitle
-    ;EnsureFocus(ctrl, winTitle)
     Sleep 500
 
     if !ControlSetText("", ctrl, winTitle) {
@@ -94,13 +94,56 @@ SendToTree(dmSpec, keys) {
     Send keys
 }
 
+DirHasLock(dir) {
+    for pat in ["*.ldb", "*.laccdb"]          ; Jet/ACE 两种锁
+        Loop Files, dir "\" pat, "F"
+            return true
+    return false
+}
+
+WaitNoLock(dir, timeoutMs := 60000, pollMs := 250) {
+    deadline := A_TickCount + timeoutMs
+    while (A_TickCount < deadline) {
+        if !DirHasLock(dir)
+            return true
+        Sleep pollMs
+    }
+    return false
+}
+
+; --- 等文件大小稳定 ---
+WaitFileStable(fp, stableMs := 4000, timeoutMs := 1800000, pollMs := 500) {
+    start := A_TickCount
+    lastSize := -1
+    lastChange := A_TickCount
+    while (A_TickCount - start < timeoutMs) {
+        if FileExist(fp) {
+            size := FileGetSize(fp, "Raw")
+            if (size = lastSize) {
+                if (A_TickCount - lastChange >= stableMs)
+                    return true   ; 存在且连续 stableMs 未增长
+            } else {
+                lastSize := size
+                lastChange := A_TickCount
+            }
+        } else {
+            ; 如果进度窗已经消失且文件还不存在，多半是失败/取消
+            if !WinExist("Convert File")
+                return false
+        }
+        Sleep pollMs
+    }
+    return false
+}
+
+
 
 ; -------------------- Main Loop --------------------
 Loop {
     try {
         ; ---------------------------Step 1: get next psg path and name from get_next.py-------------------------------------------------
 
-        cmd := A_ComSpec ' /c python "' A_ScriptDir '\get_next.py" "D:\PSG_test\test_paths.xlsx" "Sheet1" > "' A_ScriptDir '\result.json"'
+        cmd := A_ComSpec ' /c python "' A_ScriptDir '\get_next.py" "E:\Machine_01\Sandman\Metadata\group4_A.xlsx" "Sheet1" > "' A_ScriptDir '\result.json"'
         RunWait(cmd, , "Hide")
 
         result := FileRead(A_ScriptDir "\result.json", "UTF-8")
@@ -264,15 +307,37 @@ Loop {
 
         WinWait(dmSpec,,45), WinActivate(dmSpec), WinWaitActive(dmSpec,,30)
 
-        ;EnsureFocus("SysTreeView321", dmSpec)
+        
+        SplitPath(path, , &lockDir)
+        ; 如果实际锁文件在上一级目录，就再执行一次 SplitPath(lockDir, , &lockDir)
+
+        if !WaitNoLock(lockDir, 60000) {
+            UpdateStatus(row, "skip_lock", "lock timeout at " lockDir)
+            continue
+        }
+
+        WinActivate(dmSpec)
+        WinWaitActive(dmSpec,, 3)
+
+        EnsureFocus("SysTreeView321", dmSpec)
+
+        Send("{Ctrl up}{Shift up}{Alt up}")
+
+        ; ↑Down →Right ↓Down
+        ControlSend("{Down}",  "SysTreeView321", dmSpec)
+        Sleep 150
+        ControlSend("{Right}", "SysTreeView321", dmSpec)
+        Sleep 150
+        ControlSend("{Down}",  "SysTreeView321", dmSpec)
 
         ; Down -> Right -> Down
-        SendToTree(dmSpec, "{Down}")
-        Sleep 250
-        SendToTree(dmSpec, "{Right}")
-        Sleep 250
-        SendToTree(dmSpec, "{Down}")
-        Sleep 250
+        ;SendToTree(dmSpec, "{Down}")
+        ;Sleep 250
+        ;SendToTree(dmSpec, "{Right}")
+        ;Sleep 250
+        ;SendToTree(dmSpec, "{Down}")
+        ;Sleep 250
+
         Loop 7 {
             Send "{Tab}"
             Sleep 250
@@ -326,6 +391,7 @@ Loop {
 
         ControlSetText("", "Edit1", dlg3)
         Sleep(1000) 
+        ;ControlSetText(name, "Edit1", dlg3)
         ControlSetText(name . ".REC", "Edit1", dlg3)
         Sleep(1000)
 
@@ -339,15 +405,16 @@ Loop {
         Send("{Enter}")              ; click OK
 
         ;------------------------Handle Data Management Warning-------------------------
-        dlg5 := "Data Management ahk_exe Data Management.exe"
-        WinWait(dlg5,,45), WinActivate(dlg5), WinWaitActive(dlg5,,5)
-        Sleep(300)
-        Send("{Enter}")               ; click OK
-        Sleep(1000)
+        ;dlg5 := "Data Management ahk_exe Data Management.exe"
+        ;WinWait(dlg5,,45), WinActivate(dlg5), WinWaitActive(dlg5,,5)
+        ;Sleep(300)
+        ;Send("{Enter}")               ; click OK
+        ;Sleep(1000)
 
         ;---------------------------Convert File-----------------------------------------
         WinWait("Convert File", , 1800)
         sleep(2000)
+
         WinWaitClose("Convert File", , 1800)
         sleep(2000)
         
@@ -378,28 +445,57 @@ Loop {
         ;    PostMessage(0x00F5, 0, 0, "Button1", dmSpec)  ; BM_CLICK   
         ;}
 
+        Sleep 3000
         ; -------------------Analysis Warning----------------
         WinWait("Analysis", , 60), WinActivate("Analysis"), WinWaitActive("Analysis",,5)
         Sleep 1000
         Send("!o")
-        Sleep 1000
+        Sleep 3000
 
         ; -----------------Select Score----------------------
         WinWait("Select Score", , 60), WinActivate("Select Score"), WinWaitActive("Select Score",,5)
         Send "{Up 2}"
         Sleep 1000
         Send "{Enter}"
-        Sleep 1000
+        Sleep 6000
 
         ; ---------------------Analysis Warning 2--------------------------
         WinWait("Analysis", , 60), WinActivate("Analysis"), WinWaitActive("Analysis",,5)
-        Sleep 1000
+        Sleep 2000
         Send "{Enter}"
-        Sleep 1000
+        Sleep 3000
+
+        ; ==========
+        DismissAnalysisWarnings(timeout := 2.0, maxLoops := 5) {
+            title := "Analysis ahk_class #32770"
+
+            Loop maxLoops {
+                if !WinWait(title, , timeout)
+                    break
+
+                WinActivate(title)
+                WinWaitActive(title, , 1)
+
+                Send("{Ctrl up}{Shift up}{Alt up}")
+
+                try {
+                    if !ControlClick("Button1", title) {
+                        ; 如果 Button1
+                        Send("{Enter}")
+                    }
+                } catch {
+                    Send("{Enter}")
+                }
+
+                Sleep 300
+            }
+        }
+        DismissAnalysisWarnings( timeout := 2.0, maxLoops := 5 )
+        Sleep 2000
 
         ; ---------------- Display Event Window --------------------------
         Send "{F10}"
-        Sleep 500
+        Sleep 1000
         Loop 6 {
             Send "{Right}"
             Sleep 500
@@ -411,7 +507,7 @@ Loop {
             Sleep 500
         }
         Send "{Enter}"
-        Sleep 1000
+        Sleep 5000
 
         ; ---------------- Display All Event Data ---------
         WinActivate("ahk_exe Analysis.exe"), WinWaitActive("ahk_exe Analysis.exe",,5)
@@ -510,6 +606,27 @@ Loop {
             Sleep 100
         }
         Send "{Enter}"
+
+        ; ==========
+        CloseResidualDialogs(titles := ["Analysis","Data Management"], timeout := 1.5, maxLoops := 6) {
+            for t in titles {
+                dlg := t " ahk_class #32770" 
+                Loop maxLoops {
+                    if !WinWait(dlg, , timeout)
+                        break
+                    WinActivate(dlg)
+                    WinWaitActive(dlg, , 1)
+                    Send("{Ctrl up}{Shift up}{Alt up}")
+                    if !ControlClick("Button1", dlg)
+                        Send("{Enter}")
+                    WinWaitClose(dlg, , 2)
+                    Sleep 120
+                }
+            }
+        }
+        CloseResidualDialogs(["Analysis","Data Management"], 2.0, 5) 
+        if ProcessExist("Analysis.exe")
+            ProcessWaitClose("Analysis.exe", 2)
 
         sandTitle := "Sandman Navigation Screen"
         if !WinWait(sandTitle ' ahk_class #32770',, 10)
