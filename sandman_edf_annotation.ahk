@@ -94,6 +94,34 @@ SendToTree(dmSpec, keys) {
     Send keys
 }
 
+; ===== 精确选择：根节点的第 N 个子节点 =====
+SelectTopIndex(winTitle, ctrl := "SysTreeView321", index := 2) {
+    hTV := ControlGetHwnd(ctrl, winTitle)
+
+    TVM_GETNEXTITEM    := 0x110A
+    TVM_SELECTITEM     := 0x110B
+    TVM_ENSUREVISIBLE  := 0x1114
+    TVGN_ROOT          := 0x0
+    TVGN_NEXT          := 0x1
+    TVGN_CARET         := 0x9
+
+    hItem := SendMessage(TVM_GETNEXTITEM, TVGN_ROOT, 0,, "ahk_id " hTV) ; 顶层第1个
+    if !hItem
+        throw Error("no top-level item")
+
+    i := 1
+    while (i < index) {
+        next := SendMessage(TVM_GETNEXTITEM, TVGN_NEXT, hItem,, "ahk_id " hTV)
+        if !next
+            throw Error("top-level index out of range: " index)
+        hItem := next, i++
+    }
+    SendMessage(TVM_SELECTITEM, TVGN_CARET, hItem,, "ahk_id " hTV)
+    SendMessage(TVM_ENSUREVISIBLE, 0, hItem,, "ahk_id " hTV)
+}
+
+
+
 DirHasLock(dir) {
     for pat in ["*.ldb", "*.laccdb"]          ; Jet/ACE
         Loop Files, dir "\" pat, "F"
@@ -304,7 +332,6 @@ Loop {
 
         WinWait(dmSpec,,45), WinActivate(dmSpec), WinWaitActive(dmSpec,,30)
 
-        
         SplitPath(path, , &lockDir)
 
         if !WaitNoLock(lockDir, 60000) {
@@ -316,8 +343,9 @@ Loop {
         WinWaitActive(dmSpec,, 10)
 
         EnsureFocus("SysTreeView321", dmSpec)
+        SelectTopIndex(dmSpec, "SysTreeView321", 2)
 
-        Send("{Ctrl up}{Shift up}{Alt up}")
+        ;Send("{Ctrl up}{Shift up}{Alt up}")
 
         ; ↑Down →Right ↓Down
         ControlSend("{Down}",  "SysTreeView321", dmSpec)
