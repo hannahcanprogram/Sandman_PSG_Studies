@@ -95,7 +95,7 @@ SendToTree(dmSpec, keys) {
 }
 
 DirHasLock(dir) {
-    for pat in ["*.ldb", "*.laccdb"]          ; Jet/ACE 两种锁
+    for pat in ["*.ldb", "*.laccdb"]          ; Jet/ACE
         Loop Files, dir "\" pat, "F"
             return true
     return false
@@ -111,7 +111,6 @@ WaitNoLock(dir, timeoutMs := 60000, pollMs := 250) {
     return false
 }
 
-; --- 等文件大小稳定 ---
 WaitFileStable(fp, stableMs := 4000, timeoutMs := 1800000, pollMs := 500) {
     start := A_TickCount
     lastSize := -1
@@ -121,13 +120,12 @@ WaitFileStable(fp, stableMs := 4000, timeoutMs := 1800000, pollMs := 500) {
             size := FileGetSize(fp, "Raw")
             if (size = lastSize) {
                 if (A_TickCount - lastChange >= stableMs)
-                    return true   ; 存在且连续 stableMs 未增长
+                    return true
             } else {
                 lastSize := size
                 lastChange := A_TickCount
             }
         } else {
-            ; 如果进度窗已经消失且文件还不存在，多半是失败/取消
             if !WinExist("Convert File")
                 return false
         }
@@ -135,7 +133,6 @@ WaitFileStable(fp, stableMs := 4000, timeoutMs := 1800000, pollMs := 500) {
     }
     return false
 }
-
 
 
 ; -------------------- Main Loop --------------------
