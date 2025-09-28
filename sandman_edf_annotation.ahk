@@ -148,7 +148,7 @@ Loop {
         path := RegExReplace(result, '.*"path":\s*"(.*?)".*', "$1")
         name := RegExReplace(result, '.*"name":\s*"(.*?)".*', "$1")
         result := FileRead(A_ScriptDir "\result.json", "UTF-8")
-
+        
         if (Trim(result) = "")
         {
             MsgBox "failed reading result.json or empty, process ended", "error", "Iconx"
@@ -353,10 +353,11 @@ Loop {
             throw Error("failed to click Convert")
         ;Button6 is the destination folder
         tries := 0
-        while (tries < 10) {
+        while (tries < 15) {
             EnsureFocus("Button6", dlg)
+            Sleep 800
             ControlClick("Button6", dlg)
-            Sleep 500
+            Sleep 800
             focused := ControlGetFocus(dlg)
             if (focused = "Button6") {
                 break   ;
@@ -498,6 +499,7 @@ Loop {
         }
         Send "{Enter}"
         Sleep 1000
+
         Loop 11 {
             Send "{Down}"
             Sleep 500
@@ -525,6 +527,7 @@ Loop {
             Send "{Down 2}"
             Sleep 1000
             Send "{Enter}"
+            Sleep 1000
             BlockInput "MouseMoveOff"
         }
         Click "Right"
