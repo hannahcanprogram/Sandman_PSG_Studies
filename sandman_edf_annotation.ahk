@@ -313,7 +313,7 @@ Loop {
         }
 
         WinActivate(dmSpec)
-        WinWaitActive(dmSpec,, 3)
+        WinWaitActive(dmSpec,, 10)
 
         EnsureFocus("SysTreeView321", dmSpec)
 
@@ -339,13 +339,13 @@ Loop {
             Sleep 250
         }
         ;Send "{Enter}"   ; Try #1 convert
-        Send("!o") 
+        ;Send("!o") 
 
         ; Try #2 
         dlg   := "Select Destination ahk_class #32770"
-        ;if !WinWait(dlg,,2) {
-        ;    PostMessage(0x00F5, 0, 0, "Button6", dmSpec)  ; BM_CLICK
-        ;}
+        if !WinWait(dlg,,2) {
+            PostMessage(0x00F5, 0, 0, "Button6", dmSpec)  ; BM_CLICK
+        }
 
         ;----------------------------- Select Destination-------------------------------
         WinWait(dlg,,45), WinActivate(dlg), WinWaitActive(dlg,,5)
