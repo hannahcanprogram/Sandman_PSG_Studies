@@ -1,10 +1,7 @@
-# get_next.py  —— openpyxl
-import sys, json, time, os
-from openpyxl import load_workbook
+# get_next_csv.py
+import sys, os, json, csv, time
 
-def to_str(v):
-    if v is None: return ""
-    return str(v).strip()
+def to_str(v): return "" if v is None else str(v).strip()
 
 def is_na(s):
     s = to_str(s).lower()
@@ -22,85 +19,70 @@ def should_skip(v):
     s = to_str(v).lower()
     return is_one(s) or s == "running"
 
-def find_col(ws, header):
-    tgt = header.lower()
-    for c in range(1, ws.max_column + 1):
-        if to_str(ws.cell(1, c).value).lower() == tgt:
-            return c
-    raise ValueError(f"Column '{header}' not found in row 1.")
+def ci_lookup(headers, name):
+    tgt = name.lower()
+    for h in headers:
+        if to_str(h).lower() == tgt:
+            return h
+    raise ValueError(f"Header '{name}' not found (got: {headers})")
 
-def open_wb_retry(path, tries=10, delay=0.4):
-    for i in range(tries):
+def read_all_rows(csv_path, encoding_list=("utf-8-sig","utf-8","latin-1")):
+    last_err = None
+    for enc in encoding_list:
         try:
-            return load_workbook(path, read_only=False, data_only=True)
-        except PermissionError:
-            time.sleep(delay)
-        except Exception:
-            if i == tries - 1: raise
-            time.sleep(delay)
+            with open(csv_path, "r", newline="", encoding=enc) as f:
+                r = csv.DictReader(f)
+                rows = list(r)
+                return r.fieldnames, rows, enc
+        except Exception as e:
+            last_err = e
+    raise last_err
 
-def save_replace_retry(wb, path, tries=10, delay=0.4):
-    tmp = path + ".tmp"
-    for i in range(tries):
-        try:
-            wb.save(tmp)
-            os.replace(tmp, path)
-            return
-        except PermissionError:
-            time.sleep(delay)
-        except Exception:
-            try:
-                if os.path.exists(tmp): os.remove(tmp)
-            except: pass
-            if i == tries - 1: raise
-            time.sleep(delay)
+def write_all_rows_atomic(csv_path, headers, rows, encoding):
+    tmp = csv_path + ".tmp"
+    with open(tmp, "w", newline="", encoding=encoding) as f:
+        w = csv.DictWriter(f, fieldnames=headers)
+        w.writeheader()
+        w.writerows(rows)
+    os.replace(tmp, csv_path)
 
-def main(xlsx, sheet_name="Sheet1"):
-    wb = open_wb_retry(xlsx)
-    try:
-        if sheet_name not in wb.sheetnames:
-            raise ValueError(f"Worksheet '{sheet_name}' not found.")
-        ws = wb[sheet_name]
+def main(csv_path):
+    headers, rows, enc = read_all_rows(csv_path)
+    if not rows:
+        print("{}"); return
 
-        c_path = find_col(ws, "Path")
-        c_name = find_col(ws, "Name")
-        c_stat = find_col(ws, "Status")
+    h_path = ci_lookup(headers, "Path")
+    h_name = ci_lookup(headers, "Name")
+    h_stat = ci_lookup(headers, "Status")
 
-        last = ws.max_row
-        while last >= 2 and to_str(ws.cell(last, c_path).value) == "":
-            last -= 1
-        if last < 2:
-            print("{}"); sys.stdout.flush(); return
+    # CSV 的第 1 行是表头，因此数据行的“人类行号”= 索引 + 2
+    target_idx = None
+    for i, row in enumerate(rows):
+        if not should_skip(row.get(h_stat, "")):
+            target_idx = i
+            break
 
-        target_row = None
-        for r in range(2, last + 1):
-            if not should_skip(ws.cell(r, c_stat).value):
-                target_row = r
-                break
+    if target_idx is None:
+        print("{}"); return
 
-        if not target_row:
-            print("{}"); sys.stdout.flush(); return
+    row = rows[target_idx]
+    p = row.get(h_path, "")
+    n = row.get(h_name, "")
 
-        p = ws.cell(target_row, c_path).value
-        n = ws.cell(target_row, c_name).value
+    # 标记 running 并保存
+    rows[target_idx][h_stat] = "running"
+    write_all_rows_atomic(csv_path, headers, rows, enc)
 
-        ws.cell(target_row, c_stat).value = "running"
-        save_replace_retry(wb, xlsx)
+    if is_na(p):
+        print(json.dumps({"path": "na"})); return
 
-        if is_na(p):
-            print(json.dumps({"path": "na"})); sys.stdout.flush(); return
-
-        out = {"path": to_str(p), "name": to_str(n), "row": int(target_row)}
-        print(json.dumps(out, ensure_ascii=False)); sys.stdout.flush()
-    finally:
-        try: wb.close()
-        except: pass
+    out = {"path": to_str(p), "name": to_str(n), "row": int(target_idx + 2)}
+    print(json.dumps(out, ensure_ascii=False))
 
 if __name__ == "__main__":
     try:
-        xlsx = sys.argv[1]
-        sheet = sys.argv[2] if len(sys.argv) > 2 else "Sheet1"
-        main(xlsx, sheet)
+        csv_path = sys.argv[1]
+        main(csv_path)
     except Exception as e:
         sys.stderr.write("ERROR: " + repr(e) + "\n")
         sys.stderr.flush()

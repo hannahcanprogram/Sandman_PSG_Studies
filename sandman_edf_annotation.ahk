@@ -4,14 +4,16 @@
 SetTitleMatchMode(2)
 SetWorkingDir(A_ScriptDir)
 
+metadatapath := "G:\Sandman\Metadata\group1_B.csv"
+
+; --- 写回状态 ---
 UpdateStatus(row, status, extra := "") {
-    ;xlsx  := "D:\PSG_test\test_paths.xlsx"
-    xlsx  := "E:\Machine_01\Sandman\Metadata\group4_A.xlsx"
-    sheet := "Sheet1"
+    global metadatapath
     extra2 := StrReplace(extra, '"', "''")
     cmd := A_ComSpec
-        . ' /c python "' A_ScriptDir '\update_status.py" '
-        . '"' xlsx '" "' sheet '" ' row ' ' status ' "' extra2 '"'
+        . ' /c python "' A_ScriptDir '\update_status.py" "'
+        . metadatapath '" ' row ' ' status ' "' extra2 '" 2>> "'
+        . A_ScriptDir '\error.log"'
     RunWait(cmd, , "Hide")
 }
 
@@ -137,8 +139,15 @@ WaitNoLock(dir, timeoutMs := 60000, pollMs := 250) {
     return false
 }
 
-ExpandAndSelectChildUnderCaret_ByIndex(winTitle, ctrl := "SysTreeView321", childIndex := 1) {
+; 更稳的展开并选中子节点（AHK v2）
+ExpandAndSelectChildUnderCaret_ByIndex(winTitle, ctrl := "SysTreeView321"
+    , childIndex := 1, timeoutMs := 10000, expandRetries := 3) {
+
     hTV := ControlGetHwnd(ctrl, winTitle)
+    if !hTV
+        throw Error("tree control not found: " ctrl)
+
+    ; TVM/TVGN 常量
     TVM_GETNEXTITEM   := 0x110A
     TVM_SELECTITEM    := 0x110B
     TVM_EXPAND        := 0x1102
@@ -148,33 +157,45 @@ ExpandAndSelectChildUnderCaret_ByIndex(winTitle, ctrl := "SysTreeView321", child
     TVGN_NEXT         := 0x1
     TVE_EXPAND        := 0x0002
 
+    ; 取当前 caret 项
     hCaret := SendMessage(TVM_GETNEXTITEM, TVGN_CARET, 0,, "ahk_id " hTV)
     if !hCaret
         throw Error("no caret item")
 
-    SendMessage(TVM_EXPAND, TVE_EXPAND, hCaret,, "ahk_id " hTV)
-
-    start := A_TickCount
-    hChild := 0
-    while (A_TickCount - start < 3000) {
-        hChild := SendMessage(TVM_GETNEXTITEM, TVGN_CHILD, hCaret,, "ahk_id " hTV)
-        if hChild
-            break
-        Sleep 50
+    ; 多次尝试展开（有些控件第一次不响应）
+    Loop expandRetries {
+        SendMessage(TVM_EXPAND, TVE_EXPAND, hCaret,, "ahk_id " hTV)
+        SendMessage(TVM_ENSUREVISIBLE, 0, hCaret,, "ahk_id " hTV)
+        Sleep 120
     }
-    if !hChild
-        throw Error("no child under selected item")
 
-    h := hChild, i := 1
+    ; 轮询等待子节点出现
+    start := A_TickCount
+    hFirstChild := 0
+    while (A_TickCount - start < timeoutMs) {
+        hFirstChild := SendMessage(TVM_GETNEXTITEM, TVGN_CHILD, hCaret,, "ahk_id " hTV)
+        if hFirstChild
+            break
+        Sleep 100
+    }
+    if !hFirstChild
+        throw Error("no child under selected item (waited " Round((A_TickCount-start)/1000,1) "s)")
+
+    ; 迭代到第 childIndex 个；不足时回退到最后一个
+    h := hFirstChild, i := 1, last := hFirstChild
     while (i < childIndex) {
         next := SendMessage(TVM_GETNEXTITEM, TVGN_NEXT, h,, "ahk_id " hTV)
         if !next
             break
-        h := next, i++
+        last := next, h := next, i++
     }
+    if (i < childIndex)  ; 请求的索引超出范围 -> 回退到最后一个
+        h := last
 
+    ; 选中并确保可见
     SendMessage(TVM_SELECTITEM, TVGN_CARET, h,, "ahk_id " hTV)
     SendMessage(TVM_ENSUREVISIBLE, 0, h,, "ahk_id " hTV)
+    Sleep 80
     return h
 }
 
@@ -184,7 +205,12 @@ Loop {
     try {
         ; ---------------------------Step 1: get next psg path and name from get_next.py-------------------------------------------------
 
-        cmd := A_ComSpec ' /c python "' A_ScriptDir '\get_next.py" "E:\Machine_01\Sandman\Metadata\group4_A.xlsx" "Sheet1" > "' A_ScriptDir '\result.json"'
+        ;cmd := A_ComSpec ' /c python "' A_ScriptDir '\get_next.py" "G:\Sandman\Metadata\group1_B.csv" "Sheet1" > "' A_ScriptDir '\result.json"'
+        cmd := A_ComSpec
+        . ' /c python "' A_ScriptDir '\get_next.py" "'
+        . metadatapath '" > "' A_ScriptDir '\result.json" 2>> "'
+        . A_ScriptDir '\error.log"'
+
         RunWait(cmd, , "Hide")
 
         result := FileRead(A_ScriptDir "\result.json", "UTF-8")
@@ -360,7 +386,9 @@ Loop {
 
         EnsureFocus("SysTreeView321", dmSpec)
         SelectTopIndex(dmSpec, "SysTreeView321", 2)
-        ExpandAndSelectChildUnderCaret_ByIndex(dmSpec, "SysTreeView321", 1)
+        sleep 1000
+        ;ExpandAndSelectChildUnderCaret_ByIndex(dmSpec, "SysTreeView321", 1)
+        ExpandAndSelectChildUnderCaret_ByIndex(dmSpec, "SysTreeView321", 1, 10000, 3)
 
         ;Send("{Ctrl up}{Shift up}{Alt up}")
 

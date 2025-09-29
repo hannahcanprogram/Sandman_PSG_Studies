@@ -1,48 +1,37 @@
-# update_status.py —— openpyxl
-import sys, csv, time, os
-from openpyxl import load_workbook
+# update_status_csv_log.py
+import sys, os, csv, time
 
-LOG_CSV = r"E:\Machine_01\Sandman\Logs\sandman_batch_log_group4A.csv"
+# 日志文件路径，可以改成你自己的
+LOG_CSV = r"G:\Sandman\LOGS\sandman_batch_log_group1B.csv"
 
-def to_str(x):
-    return "" if x is None else str(x).strip()
+def to_str(v): return "" if v is None else str(v).strip()
 
-def find_col(ws, header):
-    tgt = header.lower()
-    for c in range(1, ws.max_column + 1):
-        if to_str(ws.cell(1, c).value).lower() == tgt:
-            return c
-    raise ValueError(f"Column '{header}' not found.")
+def ci_lookup(headers, name):
+    tgt = name.lower()
+    for h in headers:
+        if to_str(h).lower() == tgt:
+            return h
+    raise ValueError(f"Header '{name}' not found (got: {headers})")
 
-def open_wb_retry(path, tries=10, delay=0.4):
-    for i in range(tries):
+def read_all_rows(csv_path, encoding_list=("utf-8-sig","utf-8","latin-1")):
+    last_err = None
+    for enc in encoding_list:
         try:
-            return load_workbook(path, read_only=False, data_only=True)
-        except PermissionError:
-            time.sleep(delay)
-        except Exception:
-            if i == tries - 1:
-                raise
-            time.sleep(delay)
+            with open(csv_path, "r", newline="", encoding=enc) as f:
+                r = csv.DictReader(f)
+                rows = list(r)
+                return r.fieldnames, rows, enc
+        except Exception as e:
+            last_err = e
+    raise last_err
 
-def save_replace_retry(wb, path, tries=10, delay=0.4):
-    tmp = path + ".tmp"
-    for i in range(tries):
-        try:
-            wb.save(tmp)
-            os.replace(tmp, path)
-            return
-        except PermissionError:
-            time.sleep(delay)
-        except Exception:
-            try:
-                if os.path.exists(tmp):
-                    os.remove(tmp)
-            except:
-                pass
-            if i == tries - 1:
-                raise
-            time.sleep(delay)
+def write_all_rows_atomic(csv_path, headers, rows, encoding):
+    tmp = csv_path + ".tmp"
+    with open(tmp, "w", newline="", encoding=encoding) as f:
+        w = csv.DictWriter(f, fieldnames=headers)
+        w.writeheader()
+        w.writerows(rows)
+    os.replace(tmp, csv_path)
 
 def append_log(row, name, path, status, extra):
     try:
@@ -59,45 +48,41 @@ def append_log(row, name, path, status, extra):
     except Exception:
         pass
 
-def main(xlsx, sheet, row, status, extra):
-    wb = open_wb_retry(xlsx)
-    try:
-        if sheet not in wb.sheetnames:
-            raise ValueError(f"Worksheet '{sheet}' not found.")
-        ws = wb[sheet]
+def main(csv_path, row_num, status, extra=""):
+    headers, rows, enc = read_all_rows(csv_path)
+    if row_num < 2 or row_num > len(rows) + 1:
+        raise ValueError(f"Row {row_num} out of range (max={len(rows)+1}).")
 
-        c_stat = find_col(ws, "Status")
-        c_name = find_col(ws, "Name")
-        c_path = find_col(ws, "Path")
+    h_stat = ci_lookup(headers, "Status")
+    h_name = ci_lookup(headers, "Name")
+    h_path = ci_lookup(headers, "Path")
+    h_extra = None
+    for h in headers:
+        if to_str(h).lower() == "extra":
+            h_extra = h
+            break
 
-        if row < 2 or row > ws.max_row:
-            raise ValueError(f"Row {row} out of range (max={ws.max_row}).")
+    idx = row_num - 2  # 数据行索引
+    if status.lower() == "success":
+        rows[idx][h_stat] = "1"
+    else:
+        rows[idx][h_stat] = ("error:" + to_str(extra))[:255]
+    if h_extra:
+        rows[idx][h_extra] = to_str(extra)
 
-        if status.lower() == "success":
-            ws.cell(row, c_stat).value = "1"
-        else:
-            ws.cell(row, c_stat).value = ("error:" + to_str(extra))[:255]
+    name = to_str(rows[idx].get(h_name, ""))
+    path = to_str(rows[idx].get(h_path, ""))
 
-        name = to_str(ws.cell(row, c_name).value)
-        path = to_str(ws.cell(row, c_path).value)
-
-        save_replace_retry(wb, xlsx)
-    finally:
-        try:
-            wb.close()
-        except:
-            pass
-
-    append_log(row, name, path, status, to_str(extra))
+    write_all_rows_atomic(csv_path, headers, rows, enc)
+    append_log(row_num, name, path, status, to_str(extra))
 
 if __name__ == "__main__":
     try:
-        xlsx  = sys.argv[1]
-        sheet = sys.argv[2]
-        row   = int(sys.argv[3])
-        status= sys.argv[4]            # success / error
-        extra = sys.argv[5] if len(sys.argv) > 5 else ""
-        main(xlsx, sheet, row, status, extra)
+        csv_path = sys.argv[1]
+        row_num  = int(sys.argv[2])
+        status   = sys.argv[3]               # success / error / skip_lock ...
+        extra    = sys.argv[4] if len(sys.argv)>4 else ""
+        main(csv_path, row_num, status, extra)
     except Exception as e:
         sys.stderr.write("ERROR: " + repr(e) + "\n")
         sys.stderr.flush()
