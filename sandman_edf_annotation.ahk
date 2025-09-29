@@ -6,7 +6,6 @@ SetWorkingDir(A_ScriptDir)
 
 metadatapath := "G:\Sandman\Metadata\group1_B.csv"
 
-; --- 写回状态 ---
 UpdateStatus(row, status, extra := "") {
     global metadatapath
     extra2 := StrReplace(extra, '"', "''")
@@ -139,7 +138,6 @@ WaitNoLock(dir, timeoutMs := 60000, pollMs := 250) {
     return false
 }
 
-; 更稳的展开并选中子节点（AHK v2）
 ExpandAndSelectChildUnderCaret_ByIndex(winTitle, ctrl := "SysTreeView321"
     , childIndex := 1, timeoutMs := 10000, expandRetries := 3) {
 
@@ -147,7 +145,7 @@ ExpandAndSelectChildUnderCaret_ByIndex(winTitle, ctrl := "SysTreeView321"
     if !hTV
         throw Error("tree control not found: " ctrl)
 
-    ; TVM/TVGN 常量
+    ; TVM/TVGN
     TVM_GETNEXTITEM   := 0x110A
     TVM_SELECTITEM    := 0x110B
     TVM_EXPAND        := 0x1102
@@ -157,19 +155,16 @@ ExpandAndSelectChildUnderCaret_ByIndex(winTitle, ctrl := "SysTreeView321"
     TVGN_NEXT         := 0x1
     TVE_EXPAND        := 0x0002
 
-    ; 取当前 caret 项
     hCaret := SendMessage(TVM_GETNEXTITEM, TVGN_CARET, 0,, "ahk_id " hTV)
     if !hCaret
         throw Error("no caret item")
 
-    ; 多次尝试展开（有些控件第一次不响应）
     Loop expandRetries {
         SendMessage(TVM_EXPAND, TVE_EXPAND, hCaret,, "ahk_id " hTV)
         SendMessage(TVM_ENSUREVISIBLE, 0, hCaret,, "ahk_id " hTV)
         Sleep 120
     }
 
-    ; 轮询等待子节点出现
     start := A_TickCount
     hFirstChild := 0
     while (A_TickCount - start < timeoutMs) {
@@ -181,7 +176,6 @@ ExpandAndSelectChildUnderCaret_ByIndex(winTitle, ctrl := "SysTreeView321"
     if !hFirstChild
         throw Error("no child under selected item (waited " Round((A_TickCount-start)/1000,1) "s)")
 
-    ; 迭代到第 childIndex 个；不足时回退到最后一个
     h := hFirstChild, i := 1, last := hFirstChild
     while (i < childIndex) {
         next := SendMessage(TVM_GETNEXTITEM, TVGN_NEXT, h,, "ahk_id " hTV)
@@ -189,10 +183,9 @@ ExpandAndSelectChildUnderCaret_ByIndex(winTitle, ctrl := "SysTreeView321"
             break
         last := next, h := next, i++
     }
-    if (i < childIndex)  ; 请求的索引超出范围 -> 回退到最后一个
+    if (i < childIndex)
         h := last
 
-    ; 选中并确保可见
     SendMessage(TVM_SELECTITEM, TVGN_CARET, h,, "ahk_id " hTV)
     SendMessage(TVM_ENSUREVISIBLE, 0, h,, "ahk_id " hTV)
     Sleep 80
