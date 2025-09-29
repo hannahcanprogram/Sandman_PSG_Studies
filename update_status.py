@@ -1,7 +1,6 @@
 # update_status_csv_log.py
 import sys, os, csv, time
 
-# 日志文件路径，可以改成你自己的
 LOG_CSV = r"G:\Sandman\LOGS\sandman_batch_log_group1B.csv"
 
 def to_str(v): return "" if v is None else str(v).strip()
@@ -62,7 +61,7 @@ def main(csv_path, row_num, status, extra=""):
             h_extra = h
             break
 
-    idx = row_num - 2  # 数据行索引
+    idx = row_num - 2
     if status.lower() == "success":
         rows[idx][h_stat] = "1"
     else:
