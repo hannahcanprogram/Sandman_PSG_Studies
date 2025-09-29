@@ -55,7 +55,6 @@ def main(csv_path):
     h_name = ci_lookup(headers, "Name")
     h_stat = ci_lookup(headers, "Status")
 
-    # CSV 的第 1 行是表头，因此数据行的“人类行号”= 索引 + 2
     target_idx = None
     for i, row in enumerate(rows):
         if not should_skip(row.get(h_stat, "")):
@@ -69,7 +68,6 @@ def main(csv_path):
     p = row.get(h_path, "")
     n = row.get(h_name, "")
 
-    # 标记 running 并保存
     rows[target_idx][h_stat] = "running"
     write_all_rows_atomic(csv_path, headers, rows, enc)
 
