@@ -1,5 +1,6 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Force
+#Warn LocalSameAsGlobal, Off
 SetTitleMatchMode(2)
 SetWorkingDir(A_ScriptDir)
 
@@ -94,7 +95,6 @@ SendToTree(dmSpec, keys) {
     Send keys
 }
 
-; ===== 精确选择：根节点的第 N 个子节点 =====
 SelectTopIndex(winTitle, ctrl := "SysTreeView321", index := 2) {
     hTV := ControlGetHwnd(ctrl, winTitle)
 
@@ -120,8 +120,6 @@ SelectTopIndex(winTitle, ctrl := "SysTreeView321", index := 2) {
     SendMessage(TVM_ENSUREVISIBLE, 0, hItem,, "ahk_id " hTV)
 }
 
-
-
 DirHasLock(dir) {
     for pat in ["*.ldb", "*.laccdb"]          ; Jet/ACE
         Loop Files, dir "\" pat, "F"
@@ -139,27 +137,45 @@ WaitNoLock(dir, timeoutMs := 60000, pollMs := 250) {
     return false
 }
 
-WaitFileStable(fp, stableMs := 4000, timeoutMs := 1800000, pollMs := 500) {
+ExpandAndSelectChildUnderCaret_ByIndex(winTitle, ctrl := "SysTreeView321", childIndex := 1) {
+    hTV := ControlGetHwnd(ctrl, winTitle)
+    TVM_GETNEXTITEM   := 0x110A
+    TVM_SELECTITEM    := 0x110B
+    TVM_EXPAND        := 0x1102
+    TVM_ENSUREVISIBLE := 0x1114
+    TVGN_CARET        := 0x9
+    TVGN_CHILD        := 0x4
+    TVGN_NEXT         := 0x1
+    TVE_EXPAND        := 0x0002
+
+    hCaret := SendMessage(TVM_GETNEXTITEM, TVGN_CARET, 0,, "ahk_id " hTV)
+    if !hCaret
+        throw Error("no caret item")
+
+    SendMessage(TVM_EXPAND, TVE_EXPAND, hCaret,, "ahk_id " hTV)
+
     start := A_TickCount
-    lastSize := -1
-    lastChange := A_TickCount
-    while (A_TickCount - start < timeoutMs) {
-        if FileExist(fp) {
-            size := FileGetSize(fp, "Raw")
-            if (size = lastSize) {
-                if (A_TickCount - lastChange >= stableMs)
-                    return true
-            } else {
-                lastSize := size
-                lastChange := A_TickCount
-            }
-        } else {
-            if !WinExist("Convert File")
-                return false
-        }
-        Sleep pollMs
+    hChild := 0
+    while (A_TickCount - start < 3000) {
+        hChild := SendMessage(TVM_GETNEXTITEM, TVGN_CHILD, hCaret,, "ahk_id " hTV)
+        if hChild
+            break
+        Sleep 50
     }
-    return false
+    if !hChild
+        throw Error("no child under selected item")
+
+    h := hChild, i := 1
+    while (i < childIndex) {
+        next := SendMessage(TVM_GETNEXTITEM, TVGN_NEXT, h,, "ahk_id " hTV)
+        if !next
+            break
+        h := next, i++
+    }
+
+    SendMessage(TVM_SELECTITEM, TVGN_CARET, h,, "ahk_id " hTV)
+    SendMessage(TVM_ENSUREVISIBLE, 0, h,, "ahk_id " hTV)
+    return h
 }
 
 
@@ -344,15 +360,16 @@ Loop {
 
         EnsureFocus("SysTreeView321", dmSpec)
         SelectTopIndex(dmSpec, "SysTreeView321", 2)
+        ExpandAndSelectChildUnderCaret_ByIndex(dmSpec, "SysTreeView321", 1)
 
         ;Send("{Ctrl up}{Shift up}{Alt up}")
 
         ; ↑Down →Right ↓Down
-        ControlSend("{Down}",  "SysTreeView321", dmSpec)
-        Sleep 150
-        ControlSend("{Right}", "SysTreeView321", dmSpec)
-        Sleep 150
-        ControlSend("{Down}",  "SysTreeView321", dmSpec)
+        ;ControlSend("{Down}",  "SysTreeView321", dmSpec)
+        ;Sleep 150
+        ;ControlSend("{Right}", "SysTreeView321", dmSpec)
+        ;Sleep 150
+        ;ControlSend("{Down}",  "SysTreeView321", dmSpec)
 
         ; Down -> Right -> Down
         ;SendToTree(dmSpec, "{Down}")
@@ -362,10 +379,10 @@ Loop {
         ;SendToTree(dmSpec, "{Down}")
         ;Sleep 250
 
-        Loop 7 {
-            Send "{Tab}"
-            Sleep 250
-        }
+        ;Loop 7 {
+        ;    Send "{Tab}"
+        ;    Sleep 250
+        ;}
         ;Send "{Enter}"   ; Try #1 convert
         ;Send("!o") 
 
@@ -383,9 +400,9 @@ Loop {
         tries := 0
         while (tries < 15) {
             EnsureFocus("Button6", dlg)
-            Sleep 800
+            Sleep 500
             ControlClick("Button6", dlg)
-            Sleep 800
+            Sleep 500
             focused := ControlGetFocus(dlg)
             if (focused = "Button6") {
                 break   ;
